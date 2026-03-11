@@ -7,5 +7,5 @@ compatibility_flags = ["nodejs_compat"]
 enabled = true
 
 [[routes]]
-pattern = "speed.it2.sh/*"
+pattern = "speed.it2.sh"
 custom_domain = true
