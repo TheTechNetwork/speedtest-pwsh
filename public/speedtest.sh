@@ -55,13 +55,13 @@ get_download_link() {
         echo "$link"
     elif [[ "$os" == "macos" ]]; then
         local link=""
-        # Try ARM64 first for Apple Silicon
+        # Try ARM64-specific build first for Apple Silicon
         if [[ "$arch" == "aarch64" ]]; then
-            link=$(echo "$page" | grep -oE 'https://install\.speedtest\.net/app/cli/ookla-speedtest-[0-9.]+-macosx-arm64\.tgz' | head -1)
+            link=$(echo "$page" | grep -oE 'https://install\.speedtest\.net/app/cli/ookla-speedtest-[0-9.]+-(macosx|macos|darwin|apple)-[a-zA-Z0-9_-]*(arm64|aarch64)[a-zA-Z0-9_-]*\.tgz' | head -1)
         fi
-        # Fall back to universal/x86_64
+        # Fall back to any macOS build (universal, x86_64, or however Ookla names it)
         if [[ -z "$link" ]]; then
-            link=$(echo "$page" | grep -oE 'https://install\.speedtest\.net/app/cli/ookla-speedtest-[0-9.]+-macosx\.tgz' | head -1)
+            link=$(echo "$page" | grep -oE 'https://install\.speedtest\.net/app/cli/ookla-speedtest-[0-9.]+-(macosx|macos|darwin|apple)[a-zA-Z0-9._-]*\.tgz' | head -1)
         fi
         echo "$link"
     fi
