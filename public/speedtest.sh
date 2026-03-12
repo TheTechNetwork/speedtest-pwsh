@@ -114,7 +114,7 @@ main() {
     chmod +x "$exe"
 
     echo "Running Speedtest..."
-    "$exe" --accept-license --accept-gdpr "$@"
+    "$exe" --accept-license --accept-gdpr --progress=no "$@"
 
     echo "Cleaning up..."
     # cleanup() runs automatically via trap
