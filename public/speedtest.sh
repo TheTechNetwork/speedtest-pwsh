@@ -102,7 +102,7 @@ main() {
     mkdir -p "$EXTRACT_DIR"
 
     echo "Downloading Speedtest CLI..."
-    curl -fsSL "$link" -o "$ARCHIVE_PATH"
+    curl -fL --silent --show-error "$link" -o "$ARCHIVE_PATH"
 
     echo "Extracting archive..."
     tar -xzf "$ARCHIVE_PATH" -C "$EXTRACT_DIR"
