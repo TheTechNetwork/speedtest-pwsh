@@ -93,14 +93,15 @@ function Get-OS {
 }
 
 function Get-Arch {
-    $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+    param ([string]$OS)
+    # Windows only ships a single win64 build — arch detection not needed
+    if ($OS -eq 'Windows') { return 'x64' }
+    # Linux and macOS ship separate builds per architecture
+    $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
     switch ($arch) {
         'X64'   { return 'x86_64' }
         'Arm64' { return 'aarch64' }
-        default {
-            Write-Warning "Unknown architecture '$arch', defaulting to x86_64."
-            return 'x86_64'
-        }
+        default { return 'x86_64' }
     }
 }
 
@@ -241,7 +242,7 @@ function Remove-Files {
 # Main Script
 try {
     $os   = Get-OS
-    $arch = Get-Arch
+    $arch = Get-Arch -OS $os
     $tempFolder = Get-TempFolder
 
     # Determine archive extension and executable name based on OS
@@ -254,7 +255,8 @@ try {
 
     Remove-Files -archivePath $archiveFilePath -folderPath $extractFolder
 
-    Write-Output "Detected platform: $os ($arch)"
+    $platformLabel = if ($os -eq 'Windows') { $os } else { "$os ($arch)" }
+    Write-Output "Detected platform: $platformLabel"
 
     $downloadLink = Get-SpeedTestDownloadLink -OS $os -Arch $arch
     if (-not $downloadLink) {
