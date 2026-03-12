@@ -47,21 +47,21 @@ get_download_link() {
     if [[ "$os" == "linux" ]]; then
         # Try exact arch first, fall back to x86_64
         local link
-        link=$(echo "$page" | grep -oP 'https://install\.speedtest\.net/app/cli/ookla-speedtest-[\d.]+-linux-'"$arch"'\.tgz' | head -1)
+        link=$(echo "$page" | grep -oE 'https://install\.speedtest\.net/app/cli/ookla-speedtest-[0-9.]+-linux-'"$arch"'\.tgz' | head -1)
         if [[ -z "$link" && "$arch" != "x86_64" ]]; then
             echo "Warning: no $arch build found, falling back to x86_64." >&2
-            link=$(echo "$page" | grep -oP 'https://install\.speedtest\.net/app/cli/ookla-speedtest-[\d.]+-linux-x86_64\.tgz' | head -1)
+            link=$(echo "$page" | grep -oE 'https://install\.speedtest\.net/app/cli/ookla-speedtest-[0-9.]+-linux-x86_64\.tgz' | head -1)
         fi
         echo "$link"
     elif [[ "$os" == "macos" ]]; then
         local link=""
         # Try ARM64 first for Apple Silicon
         if [[ "$arch" == "aarch64" ]]; then
-            link=$(echo "$page" | grep -oP 'https://install\.speedtest\.net/app/cli/ookla-speedtest-[\d.]+-macosx-arm64\.tgz' | head -1)
+            link=$(echo "$page" | grep -oE 'https://install\.speedtest\.net/app/cli/ookla-speedtest-[0-9.]+-macosx-arm64\.tgz' | head -1)
         fi
         # Fall back to universal/x86_64
         if [[ -z "$link" ]]; then
-            link=$(echo "$page" | grep -oP 'https://install\.speedtest\.net/app/cli/ookla-speedtest-[\d.]+-macosx\.tgz' | head -1)
+            link=$(echo "$page" | grep -oE 'https://install\.speedtest\.net/app/cli/ookla-speedtest-[0-9.]+-macosx\.tgz' | head -1)
         fi
         echo "$link"
     fi
