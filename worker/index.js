@@ -4,14 +4,6 @@
 // Windows (PowerShell):  irm speed.it2.sh | iex
 // Linux/macOS (bash):    curl -sL speed.it2.sh | bash
 
-const BRANCH = "claude/add-windows-linux-support-G3GgF"; // update to "main" after merge
-const RAW_BASE = `https://raw.githubusercontent.com/TheTechNetwork/speedtest-pwsh/${BRANCH}`;
-
-const SCRIPTS = {
-  ps1: `${RAW_BASE}/speedtest.ps1`,
-  sh:  `${RAW_BASE}/speedtest.sh`,
-};
-
 function detectOS(userAgent) {
   if (!userAgent) return "unknown";
   const ua = userAgent.toLowerCase();
@@ -22,7 +14,7 @@ function detectOS(userAgent) {
 }
 
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     const url = new URL(request.url);
 
     // Health check
@@ -34,25 +26,18 @@ export default {
     const os = detectOS(ua);
 
     // Windows → PowerShell script; Linux/macOS/unknown → bash script
-    const scriptUrl = os === "windows" ? SCRIPTS.ps1 : SCRIPTS.sh;
     const scriptName = os === "windows" ? "speedtest.ps1" : "speedtest.sh";
 
-    const response = await fetch(scriptUrl, {
-      headers: {
-        "User-Agent": "speedtest-worker/1.0",
-        Accept: "application/octet-stream",
-      },
-      redirect: "follow",
-    });
+    // Serve the file directly from the uploaded assets
+    const assetResponse = await env.ASSETS.fetch(
+      new Request(`https://assets.local/${scriptName}`)
+    );
 
-    if (!response.ok) {
-      return new Response(
-        `Failed to fetch ${scriptName}: ${response.statusText}`,
-        { status: 502 }
-      );
+    if (!assetResponse.ok) {
+      return new Response(`Failed to load ${scriptName}`, { status: 502 });
     }
 
-    const body = await response.text();
+    const body = await assetResponse.text();
 
     return new Response(body, {
       status: 200,
