@@ -1,6 +1,6 @@
 <#PSScriptInfo
 
-.VERSION 0.0.3
+.VERSION 0.1.0
 
 .GUID a4af5e07-d626-4b97-b4d6-eef7265d1f7c
 
@@ -16,6 +16,7 @@
 [Version 0.0.1] - Initial Release.
 [Version 0.0.2] - Added UseBasicParsing parameter to Invoke-WebRequest commands to fix issue with certain systems.
 [Version 0.0.3] - Adjusted to work with GDPR acceptance.
+[Version 0.1.0] - Added cross-platform support for Windows, Linux (x86_64 and aarch64), and macOS.
 
 #>
 
@@ -26,6 +27,7 @@
 	Downloads and runs the Speedtest.net CLI client.
 
 Designed to use with short URL to make it easy to remember.
+Supports Windows (x64/arm64), Linux (x86_64/aarch64), and macOS (Intel/Apple Silicon).
 .EXAMPLE
 	speedtest.ps1
 .PARAMETER Version
@@ -33,7 +35,7 @@ Designed to use with short URL to make it easy to remember.
 .PARAMETER Help
     Displays the full help information for the script.
 .NOTES
-	Version      : 0.0.3
+	Version      : 0.1.0
 	Created by   : asheroto
 .LINK
 	Project Site: https://github.com/asheroto/speedtest
@@ -44,7 +46,7 @@ param (
 )
 
 # Version
-$CurrentVersion = '0.0.3'
+$CurrentVersion = '0.1.0'
 $RepoOwner = 'asheroto'
 $RepoName = 'speedtest'
 $PowerShellGalleryName = 'speedtest'
@@ -72,23 +74,95 @@ if ($PSBoundParameters.ContainsKey('Verbose') -and $PSBoundParameters['Verbose']
 }
 
 # ============================================================================ #
-# Startup
+# Platform Detection
 # ============================================================================ #
 
-# Scrape the webpage to get the download link
-function Get-SpeedTestDownloadLink {
-    $url = "https://www.speedtest.net/apps/cli"
-    $webContent = Invoke-WebRequest -Uri $url -UseBasicParsing
-    if ($webContent.Content -match 'href="(https://install\.speedtest\.net/app/cli/ookla-speedtest-[\d\.]+-win64\.zip)"') {
-        return $matches[1]
+function Get-OS {
+    # $IsWindows is not defined in Windows PowerShell 5.1, only in PowerShell Core 6+
+    if ($PSVersionTable.PSEdition -eq 'Desktop') {
+        return 'Windows'
+    } elseif ($IsWindows) {
+        return 'Windows'
+    } elseif ($IsLinux) {
+        return 'Linux'
+    } elseif ($IsMacOS) {
+        return 'macOS'
     } else {
-        Write-Output "Unable to find the win64 zip download link."
-        return $null
+        throw "Unsupported operating system."
     }
 }
 
-# Download the zip file
-function Download-SpeedTestZip {
+function Get-Arch {
+    $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+    switch ($arch) {
+        'X64'   { return 'x86_64' }
+        'Arm64' { return 'aarch64' }
+        default {
+            Write-Warning "Unknown architecture '$arch', defaulting to x86_64."
+            return 'x86_64'
+        }
+    }
+}
+
+function Get-TempFolder {
+    if ($env:TEMP) {
+        return $env:TEMP
+    } elseif ($env:TMPDIR) {
+        return $env:TMPDIR.TrimEnd('/')
+    } else {
+        return '/tmp'
+    }
+}
+
+# ============================================================================ #
+# Startup
+# ============================================================================ #
+
+# Scrape the webpage to get the download link for the appropriate platform
+function Get-SpeedTestDownloadLink {
+    param (
+        [string]$OS,
+        [string]$Arch
+    )
+
+    $url = "https://www.speedtest.net/apps/cli"
+    $webContent = Invoke-WebRequest -Uri $url -UseBasicParsing
+
+    switch ($OS) {
+        'Windows' {
+            if ($webContent.Content -match 'href="(https://install\.speedtest\.net/app/cli/ookla-speedtest-[\d\.]+-win64\.zip)"') {
+                return $matches[1]
+            }
+        }
+        'Linux' {
+            # Try the exact architecture first, fall back to x86_64
+            $archSuffix = if ($Arch -eq 'aarch64') { 'aarch64' } else { 'x86_64' }
+            if ($webContent.Content -match "href=`"(https://install\.speedtest\.net/app/cli/ookla-speedtest-[\d\.]+-linux-$archSuffix\.tgz)`"") {
+                return $matches[1]
+            }
+            # Fallback to x86_64 if aarch64 not found
+            if ($archSuffix -ne 'x86_64' -and $webContent.Content -match 'href="(https://install\.speedtest\.net/app/cli/ookla-speedtest-[\d\.]+-linux-x86_64\.tgz)"') {
+                Write-Warning "Could not find aarch64 build, falling back to x86_64."
+                return $matches[1]
+            }
+        }
+        'macOS' {
+            # Try ARM64 first for Apple Silicon, then fall back to universal/x86_64
+            if ($Arch -eq 'aarch64' -and $webContent.Content -match 'href="(https://install\.speedtest\.net/app/cli/ookla-speedtest-[\d\.]+-macosx-arm64\.tgz)"') {
+                return $matches[1]
+            }
+            if ($webContent.Content -match 'href="(https://install\.speedtest\.net/app/cli/ookla-speedtest-[\d\.]+-macosx\.tgz)"') {
+                return $matches[1]
+            }
+        }
+    }
+
+    Write-Output "Unable to find the download link for $OS ($Arch)."
+    return $null
+}
+
+# Download the archive file
+function Download-SpeedTestArchive {
     param (
         [string]$downloadLink,
         [string]$destination
@@ -96,14 +170,28 @@ function Download-SpeedTestZip {
     Invoke-WebRequest -Uri $downloadLink -OutFile $destination -UseBasicParsing
 }
 
-# Extract the zip file
-function Extract-Zip {
+# Extract the archive (zip on Windows, tgz on Linux/macOS)
+function Extract-Archive {
     param (
-        [string]$zipPath,
-        [string]$destination
+        [string]$archivePath,
+        [string]$destination,
+        [string]$OS
     )
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
-    [System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $destination)
+
+    if (-not (Test-Path $destination)) {
+        New-Item -ItemType Directory -Path $destination | Out-Null
+    }
+
+    if ($OS -eq 'Windows') {
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        [System.IO.Compression.ZipFile]::ExtractToDirectory($archivePath, $destination)
+    } else {
+        # Linux and macOS use tgz; invoke tar which is available on both
+        $result = & tar -xzf $archivePath -C $destination
+        if ($LASTEXITCODE -ne 0) {
+            throw "tar extraction failed with exit code $LASTEXITCODE."
+        }
+    }
 }
 
 # Run the speedtest executable
@@ -143,34 +231,54 @@ function Remove-File {
 
 function Remove-Files {
     param(
-        [string]$zipPath,
+        [string]$archivePath,
         [string]$folderPath
     )
-    Remove-File -Path $zipPath
+    Remove-File -Path $archivePath
     Remove-File -Path $folderPath
 }
 
 # Main Script
 try {
-    $tempFolder = $env:TEMP
-    $zipFilePath = Join-Path $tempFolder "speedtest-win64.zip"
-    $extractFolderPath = Join-Path $tempFolder "speedtest-win64"
+    $os   = Get-OS
+    $arch = Get-Arch
+    $tempFolder = Get-TempFolder
 
-    Remove-Files -zipPath $zipFilePath -folderPath $extractFolderPath
+    # Determine archive extension and executable name based on OS
+    $archiveExt    = if ($os -eq 'Windows') { 'zip' } else { 'tgz' }
+    $executableName = if ($os -eq 'Windows') { 'speedtest.exe' } else { 'speedtest' }
 
-    $downloadLink = Get-SpeedTestDownloadLink
+    $archiveTag      = "$($os.ToLower())-$arch"
+    $archiveFilePath = Join-Path $tempFolder "speedtest-$archiveTag.$archiveExt"
+    $extractFolder   = Join-Path $tempFolder "speedtest-$archiveTag"
+
+    Remove-Files -archivePath $archiveFilePath -folderPath $extractFolder
+
+    Write-Output "Detected platform: $os ($arch)"
+
+    $downloadLink = Get-SpeedTestDownloadLink -OS $os -Arch $arch
+    if (-not $downloadLink) {
+        throw "Could not determine download link for $os ($arch)."
+    }
+
     Write-Output "Downloading SpeedTest CLI..."
-    Download-SpeedTestZip -downloadLink $downloadLink -destination $zipFilePath
+    Download-SpeedTestArchive -downloadLink $downloadLink -destination $archiveFilePath
 
-    Write-Output "Extracting Zip File..."
-    Extract-Zip -zipPath $zipFilePath -destination $extractFolderPath
+    Write-Output "Extracting archive..."
+    Extract-Archive -archivePath $archiveFilePath -destination $extractFolder -OS $os
 
-    $executablePath = Join-Path $extractFolderPath "speedtest.exe"
+    $executablePath = Join-Path $extractFolder $executableName
+
+    # On Linux/macOS ensure the binary is executable
+    if ($os -ne 'Windows') {
+        & chmod +x $executablePath
+    }
+
     Write-Output "Running SpeedTest..."
     Run-SpeedTest -executablePath $executablePath -arguments $ScriptArgs
 
     Write-Output "Cleaning up..."
-    Remove-Files -zipPath $zipFilePath -folderPath $extractFolderPath
+    Remove-Files -archivePath $archiveFilePath -folderPath $extractFolder
 
     Write-Output "Done."
 } catch {
