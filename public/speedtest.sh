@@ -102,7 +102,10 @@ main() {
     mkdir -p "$EXTRACT_DIR"
 
     echo "Downloading Speedtest CLI..."
-    curl -fL --silent --show-error "$link" -o "$ARCHIVE_PATH"
+    if ! curl -fL "$link" -o "$ARCHIVE_PATH" 2>/dev/null; then
+        echo "Error: failed to download Speedtest CLI from: $link" >&2
+        exit 1
+    fi
 
     echo "Extracting archive..."
     tar -xzf "$ARCHIVE_PATH" -C "$EXTRACT_DIR"
