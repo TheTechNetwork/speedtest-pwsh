@@ -4,9 +4,12 @@
 // Windows (PowerShell):  irm speed.it2.sh | iex
 // Linux/macOS (bash):    curl -sL speed.it2.sh | bash
 
+const BRANCH = "claude/add-windows-linux-support-G3GgF"; // update to "main" after merge
+const RAW_BASE = `https://raw.githubusercontent.com/TheTechNetwork/speedtest-pwsh/${BRANCH}`;
+
 const SCRIPTS = {
-  ps1: "https://github.com/TheTechNetwork/speedtest-pwsh/releases/latest/download/speedtest.ps1",
-  sh:  "https://github.com/TheTechNetwork/speedtest-pwsh/releases/latest/download/speedtest.sh",
+  ps1: `${RAW_BASE}/speedtest.ps1`,
+  sh:  `${RAW_BASE}/speedtest.sh`,
 };
 
 function detectOS(userAgent) {
